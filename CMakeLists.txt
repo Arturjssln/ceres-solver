@@ -169,7 +169,8 @@ option(EXPORT_BUILD_DIR
   "Export build directory using CMake (enables external use without install)." OFF)
 option(BUILD_TESTING "Enable tests" ON)
 option(BUILD_DOCUMENTATION "Build User's Guide (html)" OFF)
-option(BUILD_EXAMPLES "Build examples" ON)
+# option(BUILD_EXAMPLES "Build examples" ON)
+option(BUILD_SRC "Build src" ON)
 option(BUILD_BENCHMARKS "Build Ceres benchmarking suite" ON)
 option(BUILD_SHARED_LIBS "Build Ceres as a shared library." OFF)
 option(PROVIDE_UNINSTALL_TARGET "Add a custom target to ease removal of installed targets" ON)
@@ -229,8 +230,11 @@ if (IOS)
   message(STATUS "Building for iOS: SuiteSparse, CXSparse, LAPACK, gflags, "
     "and OpenMP are not available.")
 
-  update_cache_variable(BUILD_EXAMPLES OFF)
-  message(STATUS "Building for iOS: Will not build examples.")
+  # update_cache_variable(BUILD_EXAMPLES OFF)
+  # message(STATUS "Building for iOS: Will not build examples.")
+
+  update_cache_variable(BUILD_SRC OFF)
+  message(STATUS "Building for iOS: Will not build src.")
 endif (IOS)
 
 unset(CERES_COMPILE_OPTIONS)
@@ -652,12 +656,19 @@ if (BUILD_DOCUMENTATION)
   endif()
 endif (BUILD_DOCUMENTATION)
 
-if (BUILD_EXAMPLES)
-  message("-- Build the examples.")
-  add_subdirectory(examples)
-else (BUILD_EXAMPLES)
-  message("-- Do not build any example.")
-endif (BUILD_EXAMPLES)
+# if (BUILD_EXAMPLES)
+#   message("-- Build the examples.")
+#   add_subdirectory(examples)
+# else (BUILD_EXAMPLES)
+#   message("-- Do not build any example.")
+# endif (BUILD_EXAMPLES)
+
+if (BUILD_SRC)
+  message("-- Build the src directory.")
+  add_subdirectory(src)
+else (BUILD_SRC)
+  message("-- Do not build any src.")
+endif (BUILD_SRC)
 
 # Setup installation of Ceres public headers.
 file(GLOB CERES_HDRS ${Ceres_SOURCE_DIR}/include/ceres/*.h)
@@ -802,3 +813,6 @@ if (EXPORT_BUILD_DIR)
     "${Ceres_BINARY_DIR}/CeresConfig.cmake" @ONLY)
 
 endif (EXPORT_BUILD_DIR)
+
+# Python bindings
+include(ceres_python_bindings/AddToCeres.cmake)

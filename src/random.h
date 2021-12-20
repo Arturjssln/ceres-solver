@@ -26,53 +26,37 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 //
-// Author: keir@google.com (Keir Mierle)
-//
-// Minimize 0.5 (10 - x)^2 using jacobian matrix computed using
-// numeric differentiation.
+// Author: sameeragarwal@google.com (Sameer Agarwal)
 
-#include "ceres/ceres.h"
-#include "glog/logging.h"
+#ifndef CERES_EXAMPLES_RANDOM_H_
+#define CERES_EXAMPLES_RANDOM_H_
 
-using ceres::CENTRAL;
-using ceres::CostFunction;
-using ceres::NumericDiffCostFunction;
-using ceres::Problem;
-using ceres::Solve;
-using ceres::Solver;
+#include <math.h>
+#include <stdlib.h>
 
-// A cost functor that implements the residual r = 10 - x.
-struct CostFunctor {
-  bool operator()(const double* const x, double* residual) const {
-    residual[0] = 10.0 - x[0];
-    return true;
-  }
-};
+namespace ceres {
 
-int main(int argc, char** argv) {
-  google::InitGoogleLogging(argv[0]);
-
-  // The variable to solve for with its initial value. It will be
-  // mutated in place by the solver.
-  double x = 0.5;
-  const double initial_x = x;
-
-  // Build the problem.
-  Problem problem;
-
-  // Set up the only cost function (also known as residual). This uses
-  // numeric differentiation to obtain the derivative (jacobian).
-  CostFunction* cost_function =
-      new NumericDiffCostFunction<CostFunctor, CENTRAL, 1, 1>(new CostFunctor);
-  problem.AddResidualBlock(cost_function, NULL, &x);
-
-  // Run the solver!
-  Solver::Options options;
-  options.minimizer_progress_to_stdout = true;
-  Solver::Summary summary;
-  Solve(options, &problem, &summary);
-
-  std::cout << summary.BriefReport() << "\n";
-  std::cout << "x : " << initial_x << " -> " << x << "\n";
-  return 0;
+// Return a random number sampled from a uniform distribution in the range
+// [0,1].
+inline double RandDouble() {
+  double r = static_cast<double>(rand());
+  return r / RAND_MAX;
 }
+
+// Marsaglia Polar method for generation standard normal (pseudo)
+// random numbers http://en.wikipedia.org/wiki/Marsaglia_polar_method
+inline double RandNormal() {
+  double x1, x2, w;
+  do {
+    x1 = 2.0 * RandDouble() - 1.0;
+    x2 = 2.0 * RandDouble() - 1.0;
+    w = x1 * x1 + x2 * x2;
+  } while (w >= 1.0 || w == 0.0);
+
+  w = sqrt((-2.0 * log(w)) / w);
+  return x1 * w;
+}
+
+}  // namespace ceres
+
+#endif  // CERES_EXAMPLES_RANDOM_H_

@@ -1,5 +1,5 @@
 # Ceres Solver - A fast non-linear least squares minimizer
-# Copyright 2016 Google Inc. All rights reserved.
+# Copyright 2018 Google Inc. All rights reserved.
 # http://ceres-solver.org/
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,14 +26,40 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 #
-# Author: vitus@google.com (Michael Vitus)
+# Author: mierle@gmail.com (Keir Mierle)
 
-if (GFLAGS)
-  add_executable(pose_graph_2d
-    angle_local_parameterization.h
-    normalize_angle.h
-    pose_graph_2d.cc
-    pose_graph_2d_error_term.h
-    types.h)
-  target_link_libraries(pose_graph_2d Ceres::ceres gflags)
-endif (GFLAGS)
+EXAMPLE_COPTS = [
+    # Needed to silence GFlags complaints.
+    "-Wno-sign-compare",
+    # Needed to put fscanf in a function.
+    "-Wno-format-nonliteral",
+]
+
+EXAMPLE_DEPS = [
+    "//:ceres",
+    "@com_gitlab_libeigen_eigen//:eigen",
+    "@com_github_gflags_gflags//:gflags",
+]
+
+cc_binary(
+    name = "bundle_adjuster",
+    srcs = [
+        "bal_problem.cc",
+        "bal_problem.h",
+        "bundle_adjuster.cc",
+        "random.h",
+        "snavely_reprojection_error.h",
+    ],
+    copts = EXAMPLE_COPTS,
+    deps = EXAMPLE_DEPS,
+)
+
+[cc_binary(
+    name = example,
+    srcs = [example + ".cc"],
+    copts = EXAMPLE_COPTS,
+    deps = EXAMPLE_DEPS,
+) for example in [
+    "bundle_adjustment_all",
+    "bundle_adjustment_no_cam",
+]]

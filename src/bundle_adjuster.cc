@@ -132,7 +132,6 @@ DEFINE_string(final_ply, "", "Export the refined BAL file data as a PLY "
 // clang-format on
 
 namespace ceres {
-namespace examples {
 namespace {
 
 void SetLinearSolver(Solver::Options* options) {
@@ -346,7 +345,6 @@ void SolveProblem(const char* filename) {
 }
 
 }  // namespace
-}  // namespace examples
 }  // namespace ceres
 
 int main(int argc, char** argv) {
@@ -361,6 +359,6 @@ int main(int argc, char** argv) {
         !CERES_GET_FLAG(FLAGS_use_local_parameterization))
       << "--use_local_parameterization can only be used with "
       << "--use_quaternions.";
-  ceres::examples::SolveProblem(CERES_GET_FLAG(FLAGS_input).c_str());
+  ceres::SolveProblem(CERES_GET_FLAG(FLAGS_input).c_str());
   return 0;
 }

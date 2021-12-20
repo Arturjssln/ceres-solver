@@ -42,7 +42,6 @@
 #include "random.h"
 
 namespace ceres {
-namespace examples {
 namespace {
 typedef Eigen::Map<Eigen::VectorXd> VectorRef;
 typedef Eigen::Map<const Eigen::VectorXd> ConstVectorRef;
@@ -331,5 +330,4 @@ BALProblem::~BALProblem() {
   delete[] parameters_;
 }
 
-}  // namespace examples
 }  // namespace ceres

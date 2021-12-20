@@ -44,7 +44,6 @@
 #include "ceres/rotation.h"
 
 namespace ceres {
-namespace examples {
 
 // Templated pinhole camera model for used with Ceres.  The camera is
 // parameterized using 9 parameters: 3 for rotation, 3 for translation, 1 for
@@ -173,7 +172,6 @@ struct SnavelyReprojectionErrorWithQuaternions {
   double observed_y;
 };
 
-}  // namespace examples
 }  // namespace ceres
 
 #endif  // CERES_EXAMPLES_SNAVELY_REPROJECTION_ERROR_H_

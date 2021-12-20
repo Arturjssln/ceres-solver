@@ -26,7 +26,28 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 #
-# Author: vitus@google.com (Michael Vitus)
+# Author: keir@google.com (Keir Mierle)
 
-add_executable(sampled_function sampled_function.cc)
-target_link_libraries(sampled_function Ceres::ceres)
+# Only Ceres itself should be compiled with CERES_BUILDING_SHARED_LIBRARY
+# defined, any users of Ceres will have CERES_USING_SHARED_LIBRARY defined
+# for them in Ceres' config.h if appropriate.
+if (BUILD_SHARED_LIBS)
+  remove_definitions(-DCERES_BUILDING_SHARED_LIBRARY)
+endif()
+
+add_executable(bundle_adjustment_no_cam bundle_adjustment_no_cam.cc)
+target_link_libraries(bundle_adjustment_no_cam Ceres::ceres)
+
+add_executable(bundle_adjustment_all bundle_adjustment_all.cc)
+target_link_libraries(bundle_adjustment_all Ceres::ceres)
+
+if (GFLAGS)
+  add_executable(bundle_adjuster
+                 bundle_adjuster.cc
+                 bal_problem.cc)
+  target_link_libraries(bundle_adjuster Ceres::ceres gflags)
+
+endif (GFLAGS)
+
+# add_subdirectory(sampled_function)
+# add_subdirectory(slam)
