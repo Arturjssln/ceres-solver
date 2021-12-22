@@ -35,16 +35,16 @@ if (BUILD_SHARED_LIBS)
   remove_definitions(-DCERES_BUILDING_SHARED_LIBRARY)
 endif()
 
-add_executable(bundle_adjustment_no_cam bundle_adjustment_no_cam.cc)
-target_link_libraries(bundle_adjustment_no_cam Ceres::ceres)
+# add_executable(bundle_adjustment_no_cam bundle_adjustment_no_cam.cc)
+# target_link_libraries(bundle_adjustment_no_cam Ceres::ceres)
 
-add_executable(bundle_adjustment_all bundle_adjustment_all.cc)
-target_link_libraries(bundle_adjustment_all Ceres::ceres)
+# add_executable(bundle_adjustment_all bundle_adjustment_all.cc)
+# target_link_libraries(bundle_adjustment_all Ceres::ceres)
 
 if (GFLAGS)
   add_executable(bundle_adjuster
                  bundle_adjuster.cc
-                 bal_problem.cc)
+                 ba_problem.cc)
   target_link_libraries(bundle_adjuster Ceres::ceres gflags)
 
 endif (GFLAGS)

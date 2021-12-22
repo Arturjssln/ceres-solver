@@ -58,7 +58,7 @@
 #include <string>
 #include <vector>
 
-#include "bal_problem.h"
+#include "ba_problem.h"
 #include "ceres/ceres.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -68,6 +68,7 @@
 // clang-format off
 
 DEFINE_string(input, "", "Input File name");
+DEFINE_string(output, "", "Output File name");
 DEFINE_string(trust_region_strategy, "levenberg_marquardt",
               "Options are: levenberg_marquardt, dogleg.");
 DEFINE_string(dogleg, "traditional_dogleg", "Options are: traditional_dogleg,"
@@ -79,7 +80,7 @@ DEFINE_bool(inner_iterations, false, "Use inner iterations to non-linearly "
 DEFINE_string(blocks_for_inner_iterations, "automatic", "Options are: "
               "automatic, cameras, points, cameras,points, points,cameras");
 
-DEFINE_string(linear_solver, "sparse_schur", "Options are: "
+DEFINE_string(linear_solver, "dense_schur", "Options are: "
               "sparse_schur, dense_schur, iterative_schur, sparse_normal_cholesky, "
               "dense_qr, dense_normal_cholesky and cgnr.");
 DEFINE_bool(explicit_schur_complement, false, "If using ITERATIVE_SCHUR "
@@ -90,16 +91,15 @@ DEFINE_string(preconditioner, "jacobi", "Options are: "
 DEFINE_string(visibility_clustering, "canonical_views",
               "single_linkage, canonical_views");
 
-DEFINE_string(sparse_linear_algebra_library, "suite_sparse",
+DEFINE_string(sparse_linear_algebra_library, "cx_sparse",
               "Options are: suite_sparse and cx_sparse.");
 DEFINE_string(dense_linear_algebra_library, "eigen",
               "Options are: eigen and lapack.");
 DEFINE_string(ordering, "automatic", "Options are: automatic, user.");
 
-DEFINE_bool(use_quaternions, false, "If true, uses quaternions to represent "
-            "rotations. If false, angle axis is used.");
-DEFINE_bool(use_local_parameterization, false, "For quaternions, use a local "
-            "parameterization.");
+DEFINE_bool(no_cam_optimization, false, "If true, don't optimize the camera. "
+            "If false, camera pose and rotation are optimized.");
+
 DEFINE_bool(robustify, false, "Use a robust loss function.");
 
 DEFINE_double(eta, 1e-2, "Default value for eta. Eta determines the "
@@ -107,7 +107,7 @@ DEFINE_double(eta, 1e-2, "Default value for eta. Eta determines the "
               "Changing this parameter can affect solve performance.");
 
 DEFINE_int32(num_threads, 1, "Number of threads.");
-DEFINE_int32(num_iterations, 5, "Number of iterations.");
+DEFINE_int32(num_iterations, 1000, "Number of iterations.");
 DEFINE_double(max_solver_time, 1e32, "Maximum solve time in seconds.");
 DEFINE_bool(nonmonotonic_steps, false, "Trust region algorithm can use"
             " nonmonotic steps.");
@@ -156,14 +156,14 @@ void SetLinearSolver(Solver::Options* options) {
       CERES_GET_FLAG(FLAGS_max_num_refinement_iterations);
 }
 
-void SetOrdering(BALProblem* bal_problem, Solver::Options* options) {
-  const int num_points = bal_problem->num_points();
-  const int point_block_size = bal_problem->point_block_size();
-  double* points = bal_problem->mutable_points();
+void SetOrdering(BAProblem* ba_problem, Solver::Options* options) {
+  const int num_points = ba_problem->num_points();
+  const int point_block_size = ba_problem->point_block_size();
+  double* points = ba_problem->mutable_points();
 
-  const int num_cameras = bal_problem->num_cameras();
-  const int camera_block_size = bal_problem->camera_block_size();
-  double* cameras = bal_problem->mutable_cameras();
+  const int num_cameras = ba_problem->num_cameras();
+  const int camera_block_size = ba_problem->camera_block_size();
+  double* cameras = ba_problem->mutable_cameras();
 
   if (options->use_inner_iterations) {
     if (CERES_GET_FLAG(FLAGS_blocks_for_inner_iterations) == "cameras") {
@@ -263,76 +263,68 @@ void SetMinimizerOptions(Solver::Options* options) {
   options->use_inner_iterations = CERES_GET_FLAG(FLAGS_inner_iterations);
 }
 
-void SetSolverOptionsFromFlags(BALProblem* bal_problem,
-                               Solver::Options* options) {
+void SetSolverOptionsFromFlags(BAProblem* ba_problem, Solver::Options* options) {
   SetMinimizerOptions(options);
   SetLinearSolver(options);
-  SetOrdering(bal_problem, options);
+  SetOrdering(ba_problem, options);
 }
 
-void BuildProblem(BALProblem* bal_problem, Problem* problem) {
-  const int point_block_size = bal_problem->point_block_size();
-  const int camera_block_size = bal_problem->camera_block_size();
-  double* points = bal_problem->mutable_points();
-  double* cameras = bal_problem->mutable_cameras();
-
+void BuildProblem(BAProblem* ba_problem, Problem* problem) {
   // Observations is 2*num_observations long array observations =
   // [u_1, u_2, ... , u_n], where each u_i is two dimensional, the x
   // and y positions of the observation.
-  const double* observations = bal_problem->observations();
-  for (int i = 0; i < bal_problem->num_observations(); ++i) {
+  const double* observations = ba_problem->observations();
+  for (int i = 0; i < ba_problem->num_observations(); ++i) {
     CostFunction* cost_function;
-    // Each Residual block takes a point and a camera as input and
+    // Each Residual block takes a point (and a camera) as input and
     // outputs a 2 dimensional residual.
-    cost_function = (CERES_GET_FLAG(FLAGS_use_quaternions))
-                        ? SnavelyReprojectionErrorWithQuaternions::Create(
-                              observations[2 * i + 0], observations[2 * i + 1])
+    cost_function = (CERES_GET_FLAG(FLAGS_no_cam_optimization))
+                        ? SnavelyReprojectionErrorWithoutCam::Create(
+                              observations[2 * i + 0],
+                              observations[2 * i + 1], 
+                              ba_problem->camera_for_observation(i))
                         : SnavelyReprojectionError::Create(
-                              observations[2 * i + 0], observations[2 * i + 1]);
+                              observations[2 * i + 0], 
+                              observations[2 * i + 1]);
 
     // If enabled use Huber's loss function.
     LossFunction* loss_function =
         CERES_GET_FLAG(FLAGS_robustify) ? new HuberLoss(1.0) : NULL;
 
     // Each observation correponds to a pair of a camera and a point
-    // which are identified by camera_index()[i] and point_index()[i]
-    // respectively.
-    double* camera =
-        cameras + camera_block_size * bal_problem->camera_index()[i];
-    double* point = points + point_block_size * bal_problem->point_index()[i];
-    problem->AddResidualBlock(cost_function, loss_function, camera, point);
-  }
-
-  if (CERES_GET_FLAG(FLAGS_use_quaternions) &&
-      CERES_GET_FLAG(FLAGS_use_local_parameterization)) {
-    LocalParameterization* camera_parameterization =
-        new ProductParameterization(new QuaternionParameterization(),
-                                    new IdentityParameterization(6));
-    for (int i = 0; i < bal_problem->num_cameras(); ++i) {
-      problem->SetParameterization(cameras + camera_block_size * i,
-                                   camera_parameterization);
+    double* point = ba_problem->mutable_point_for_observation(i);
+    if (CERES_GET_FLAG(FLAGS_no_cam_optimization)) {
+      problem->AddResidualBlock(cost_function, 
+                                loss_function, 
+                                point);
+    } else {
+      double* camera = ba_problem->mutable_camera_for_observation(i);
+      problem->AddResidualBlock(cost_function, 
+                                loss_function,  
+                                camera, 
+                                point);
     }
   }
 }
 
 void SolveProblem(const char* filename) {
-  BALProblem bal_problem(filename, CERES_GET_FLAG(FLAGS_use_quaternions));
+  BAProblem ba_problem(filename);
 
   if (!CERES_GET_FLAG(FLAGS_initial_ply).empty()) {
-    bal_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_initial_ply));
+    ba_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_initial_ply));
   }
 
   Problem problem;
 
   srand(CERES_GET_FLAG(FLAGS_random_seed));
-  bal_problem.Normalize();
-  bal_problem.Perturb(CERES_GET_FLAG(FLAGS_rotation_sigma),
-                      CERES_GET_FLAG(FLAGS_translation_sigma),
-                      CERES_GET_FLAG(FLAGS_point_sigma));
+  // ba_problem.Normalize();
+  // ba_problem.Perturb(CERES_GET_FLAG(FLAGS_rotation_sigma),
+  //                     CERES_GET_FLAG(FLAGS_translation_sigma),
+  //                     CERES_GET_FLAG(FLAGS_point_sigma));
 
-  BuildProblem(&bal_problem, &problem);
+  BuildProblem(&ba_problem, &problem);
   Solver::Options options;
-  SetSolverOptionsFromFlags(&bal_problem, &options);
+  SetSolverOptionsFromFlags(&ba_problem, &options);
   options.gradient_tolerance = 1e-16;
   options.function_tolerance = 1e-16;
   Solver::Summary summary;
@@ -340,7 +332,10 @@ void SolveProblem(const char* filename) {
   std::cout << summary.FullReport() << "\n";
 
   if (!CERES_GET_FLAG(FLAGS_final_ply).empty()) {
-    bal_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_final_ply));
+    ba_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_final_ply));
+  }
+  if (!CERES_GET_FLAG(FLAGS_output).empty()) {
+    ba_problem.WriteToFile(CERES_GET_FLAG(FLAGS_output));
   }
 }
 
@@ -351,14 +346,10 @@ int main(int argc, char** argv) {
   GFLAGS_NAMESPACE::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   if (CERES_GET_FLAG(FLAGS_input).empty()) {
-    LOG(ERROR) << "Usage: bundle_adjuster --input=bal_problem";
+    LOG(ERROR) << "Usage: bundle_adjuster --input=ba_problem";
     return 1;
   }
 
-  CHECK(CERES_GET_FLAG(FLAGS_use_quaternions) ||
-        !CERES_GET_FLAG(FLAGS_use_local_parameterization))
-      << "--use_local_parameterization can only be used with "
-      << "--use_quaternions.";
   ceres::SolveProblem(CERES_GET_FLAG(FLAGS_input).c_str());
   return 0;
 }

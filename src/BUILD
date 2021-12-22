@@ -44,8 +44,8 @@ EXAMPLE_DEPS = [
 cc_binary(
     name = "bundle_adjuster",
     srcs = [
-        "bal_problem.cc",
-        "bal_problem.h",
+        "ba_problem.cc",
+        "ba_problem.h",
         "bundle_adjuster.cc",
         "random.h",
         "snavely_reprojection_error.h",
@@ -54,12 +54,12 @@ cc_binary(
     deps = EXAMPLE_DEPS,
 )
 
-[cc_binary(
-    name = example,
-    srcs = [example + ".cc"],
-    copts = EXAMPLE_COPTS,
-    deps = EXAMPLE_DEPS,
-) for example in [
-    "bundle_adjustment_all",
-    "bundle_adjustment_no_cam",
-]]
+# [cc_binary(
+#     name = example,
+#     srcs = [example + ".cc"],
+#     copts = EXAMPLE_COPTS,
+#     deps = EXAMPLE_DEPS,
+# ) for example in [
+#     "bundle_adjustment_all",
+#     "bundle_adjustment_no_cam",
+# ]]

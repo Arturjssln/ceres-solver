@@ -38,17 +38,16 @@
 // For details see: http://phototour.cs.washington.edu/bundler/
 // and http://grail.cs.washington.edu/projects/bal/
 
-#ifndef CERES_EXAMPLES_SNAVELY_REPROJECTION_ERROR_H_
-#define CERES_EXAMPLES_SNAVELY_REPROJECTION_ERROR_H_
+#ifndef CERES_SNAVELY_REPROJECTION_ERROR_H_
+#define CERES_SNAVELY_REPROJECTION_ERROR_H_
 
 #include "ceres/rotation.h"
 
 namespace ceres {
 
 // Templated pinhole camera model for used with Ceres.  The camera is
-// parameterized using 9 parameters: 3 for rotation, 3 for translation, 1 for
-// focal length and 2 for radial distortion. The principal point is not modeled
-// (i.e. it is assumed be located at the image center).
+// parameterized using 12 parameters: 3 for rotation, 3 for translation, 2 for
+// focal length, 2 for radial distortion and 2 for the principal point.
 struct SnavelyReprojectionError {
   SnavelyReprojectionError(double observed_x, double observed_y)
       : observed_x(observed_x), observed_y(observed_y) {}
@@ -66,22 +65,22 @@ struct SnavelyReprojectionError {
     p[1] += camera[4];
     p[2] += camera[5];
 
-    // Compute the center of distortion. The sign change comes from
-    // the camera model that Noah Snavely's Bundler assumes, whereby
-    // the camera coordinate system has a negative z axis.
-    const T xp = -p[0] / p[2];
-    const T yp = -p[1] / p[2];
+    const T xp = p[0] / p[2];
+    const T yp = p[1] / p[2];
 
     // Apply second and fourth order radial distortion.
-    const T& l1 = camera[7];
-    const T& l2 = camera[8];
+    const T& l1 = camera[8];
+    const T& l2 = camera[9];
     const T r2 = xp * xp + yp * yp;
     const T distortion = 1.0 + r2 * (l1 + l2 * r2);
 
     // Compute final projected point position.
-    const T& focal = camera[6];
-    const T predicted_x = focal * distortion * xp;
-    const T predicted_y = focal * distortion * yp;
+    const T& focal_x = camera[6];
+    const T& focal_y = camera[7];
+    const T& principal_x = camera[10];
+    const T& principal_y = camera[11];
+    const T predicted_x = focal_x * distortion * xp + principal_x;
+    const T predicted_y = focal_y * distortion * yp + principal_y;
 
     // The error is the difference between the predicted and observed position.
     residuals[0] = predicted_x - observed_x;
@@ -94,7 +93,7 @@ struct SnavelyReprojectionError {
   // the client code.
   static ceres::CostFunction* Create(const double observed_x,
                                      const double observed_y) {
-    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 9, 3>(
+    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 12, 3>(
         new SnavelyReprojectionError(observed_x, observed_y)));
   }
 
@@ -103,50 +102,45 @@ struct SnavelyReprojectionError {
 };
 
 // Templated pinhole camera model for used with Ceres.  The camera is
-// parameterized using 10 parameters. 4 for rotation, 3 for
-// translation, 1 for focal length and 2 for radial distortion. The
-// principal point is not modeled (i.e. it is assumed be located at
-// the image center).
-struct SnavelyReprojectionErrorWithQuaternions {
-  // (u, v): the position of the observation with respect to the image
-  // center point.
-  SnavelyReprojectionErrorWithQuaternions(double observed_x, double observed_y)
-      : observed_x(observed_x), observed_y(observed_y) {}
+// parameterized using 12 parameters: 3 for rotation, 3 for translation, 2 for
+// focal length, 2 for radial distortion and 2 for the principal point.
+struct SnavelyReprojectionErrorWithoutCam {
+  SnavelyReprojectionErrorWithoutCam(double observed_x, double observed_y, const double* camera)
+      : observed_x(observed_x), observed_y(observed_y), camera(camera) {}
 
   template <typename T>
-  bool operator()(const T* const camera,
-                  const T* const point,
+  bool operator()(const T* const point,
                   T* residuals) const {
-    // camera[0,1,2,3] is are the rotation of the camera as a quaternion.
-    //
-    // We use QuaternionRotatePoint as it does not assume that the
-    // quaternion is normalized, since one of the ways to run the
-    // bundle adjuster is to let Ceres optimize all 4 quaternion
-    // parameters without a local parameterization.
+    // camera[0,1,2] are the angle-axis rotation.
     T p[3];
-    QuaternionRotatePoint(camera, point, p);
+    const T angle_axis[3] = {
+      T(camera[0]),
+      T(camera[1]),
+      T(camera[2])
+    };
+    AngleAxisRotatePoint(angle_axis, point, p);
 
-    p[0] += camera[4];
-    p[1] += camera[5];
-    p[2] += camera[6];
+    // camera[3,4,5] are the translation.
+    p[0] += T(camera[3]);
+    p[1] += T(camera[4]);
+    p[2] += T(camera[5]);
 
-    // Compute the center of distortion. The sign change comes from
-    // the camera model that Noah Snavely's Bundler assumes, whereby
-    // the camera coordinate system has a negative z axis.
-    const T xp = -p[0] / p[2];
-    const T yp = -p[1] / p[2];
+    const T xp = p[0] / p[2];
+    const T yp = p[1] / p[2];
 
     // Apply second and fourth order radial distortion.
-    const T& l1 = camera[8];
-    const T& l2 = camera[9];
-
+    const T l1 = T(camera[8]);
+    const T l2 = T(camera[9]);
     const T r2 = xp * xp + yp * yp;
     const T distortion = 1.0 + r2 * (l1 + l2 * r2);
 
     // Compute final projected point position.
-    const T& focal = camera[7];
-    const T predicted_x = focal * distortion * xp;
-    const T predicted_y = focal * distortion * yp;
+    const T focal_x = T(camera[6]);
+    const T focal_y = T(camera[7]);
+    const T principal_x = T(camera[10]);
+    const T principal_y = T(camera[11]);
+    const T predicted_x = focal_x * distortion * xp + principal_x;
+    const T predicted_y = focal_y * distortion * yp + principal_y;
 
     // The error is the difference between the predicted and observed position.
     residuals[0] = predicted_x - observed_x;
@@ -157,21 +151,16 @@ struct SnavelyReprojectionErrorWithQuaternions {
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(const double observed_x,
-                                     const double observed_y) {
-    return (
-        new ceres::AutoDiffCostFunction<SnavelyReprojectionErrorWithQuaternions,
-                                        2,
-                                        10,
-                                        3>(
-            new SnavelyReprojectionErrorWithQuaternions(observed_x,
-                                                        observed_y)));
+  static ceres::CostFunction* Create(const double observed_x, const double observed_y, const double* camera) {
+    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionErrorWithoutCam, 2, 3>(
+        new SnavelyReprojectionErrorWithoutCam(observed_x, observed_y, camera)));
   }
 
   double observed_x;
   double observed_y;
+  const double* camera;
 };
 
 }  // namespace ceres
 
-#endif  // CERES_EXAMPLES_SNAVELY_REPROJECTION_ERROR_H_
+#endif  // CERES_SNAVELY_REPROJECTION_ERROR_H_
