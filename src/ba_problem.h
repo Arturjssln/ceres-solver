@@ -66,10 +66,12 @@ class BAProblem {
 
   static int camera_block_size()     { return 12;                        }
   static int point_block_size()      { return 3;                         }
+  int num_scenes()             const { return num_scenes_;               }
   int num_cameras()            const { return num_cameras_;              }
-  int num_points()             const { return num_points_;               }
+  int num_points()             const { return num_points_per_scene_;     }
   int num_observations()       const { return num_observations_;         }
   int num_parameters()         const { return num_parameters_;           }
+  const int* scene_index()     const { return scene_index_;              }
   const int* point_index()     const { return point_index_;              }
   const int* camera_index()    const { return camera_index_;             }
   const double* observations() const { return observations_;             }
@@ -85,8 +87,16 @@ class BAProblem {
   double* mutable_camera_for_observation(int i) {
     return mutable_cameras() + camera_index_[i] * camera_block_size();
   }
-  double* mutable_point_for_observation(int i) {
-    return mutable_points() + point_index_[i] * point_block_size();
+  double* mutable_point_for_observation(int i, bool previous_scene = false) {
+    int scene_index_tmp = scene_index_[i] + (previous_scene ? -1 : 0);
+    return mutable_points() + (num_points_per_scene_ * scene_index_tmp + point_index_[i]) * point_block_size();
+  }
+  int scene_start_for_scene_id(int i) {
+    return scene_indices_offset_[i];
+  }
+
+  int scene_length_for_scene_id(int i) {
+    return scene_indices_offset_[i+1] - scene_indices_offset_[i];
   }
 
  private:
@@ -97,13 +107,16 @@ class BAProblem {
   void AngleAxisAndCenterToCamera(const double* angle_axis,
                                   const double* center,
                                   double* camera) const;
+  int num_scenes_;
   int num_cameras_;
-  int num_points_;
+  int num_points_per_scene_;
   int num_observations_;
   int num_parameters_;
 
+  int* scene_index_;
   int* point_index_;
   int* camera_index_;
+  int* scene_indices_offset_;
   double* observations_;
   // The parameter vector is laid out as follows
   // [camera_1, ..., camera_n, point_1, ..., point_m]

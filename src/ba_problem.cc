@@ -79,28 +79,37 @@ BAProblem::BAProblem(const std::string& filename) {
   };
 
   // This wil die horribly on invalid files. Them's the breaks.
+  FscanfOrDie(fptr, "%d", &num_scenes_);
   FscanfOrDie(fptr, "%d", &num_cameras_);
-  FscanfOrDie(fptr, "%d", &num_points_);
+  FscanfOrDie(fptr, "%d", &num_points_per_scene_);
   FscanfOrDie(fptr, "%d", &num_observations_);
+  VLOG(1) << "Num scenes (img): " << num_scenes_ << " " 
+            << "Num cameras: " << num_cameras_  << " " 
+            << "Num points per scene: " << num_points_per_scene_ << " " 
+            << "Num observations: " << num_observations_;
 
-  VLOG(1) << "Header: " << num_cameras_ << " " << num_points_ << " "
-          << num_observations_;
-
+  scene_index_ = new int[num_observations_];
   point_index_ = new int[num_observations_];
   camera_index_ = new int[num_observations_];
   observations_ = new double[2 * num_observations_];
+  scene_indices_offset_ = new int[num_scenes_];
+  scene_indices_offset_[0] = 0;
 
-  num_parameters_ = BAProblem::camera_block_size() * num_cameras_ + BAProblem::point_block_size() * num_points_;
+  num_parameters_ = BAProblem::camera_block_size() * num_cameras_ + BAProblem::point_block_size() * num_scenes_* num_points_per_scene_;
   parameters_ = new double[num_parameters_];
-
+  int current_scene = 0;
   for (int i = 0; i < num_observations_; ++i) {
+    FscanfOrDie(fptr, "%d", scene_index_ + i);
+    if (scene_index_[i] != current_scene) {
+      scene_indices_offset_[current_scene + 1] = i;
+      current_scene = scene_index_[i];
+    }
     FscanfOrDie(fptr, "%d", camera_index_ + i);
     FscanfOrDie(fptr, "%d", point_index_ + i);
     for (int j = 0; j < 2; ++j) {
       FscanfOrDie(fptr, "%lf", observations_ + 2 * i + j);
     }
   }
-
   for (int i = 0; i < num_parameters_; ++i) {
     FscanfOrDie(fptr, "%lf", parameters_ + i);
   }
@@ -118,10 +127,10 @@ void BAProblem::WriteToFile(const std::string& filename) const {
     return;
   };
 
-  fprintf(fptr, "%d %d %d\n", num_cameras_, num_points_, num_observations_);
+  fprintf(fptr, "%d %d %d %d\n", num_scenes_, num_cameras_, num_points_per_scene_, num_observations_);
 
   for (int i = 0; i < num_observations_; ++i) {
-    fprintf(fptr, "%d %d", camera_index_[i], point_index_[i]);
+    fprintf(fptr, "%d %d %d", scene_index_[i], camera_index_[i], point_index_[i]);
     for (int j = 0; j < 2; ++j) {
       fprintf(fptr, " %g", observations_[2 * i + j]);
     }
@@ -138,14 +147,15 @@ void BAProblem::WriteToFile(const std::string& filename) const {
   }
 
   const double* points = parameters_ + camera_block_size() * num_cameras_;
-  for (int i = 0; i < num_points(); ++i) {
-    const double* point = points + i * point_block_size();
-    for (int j = 0; j < point_block_size(); ++j) {
-      fprintf(fptr, " %.16g", point[j]);
+  for (int i = 0; i < num_scenes(); ++i) {
+    for (int j = 0; j < num_points(); ++j) {
+      const double* point = points + i * num_points_per_scene_ + j * point_block_size();
+      for (int k = 0; k < point_block_size(); ++k) {
+        fprintf(fptr, " %.16g", point[k]);
+      }
+      fprintf(fptr, "\n");
     }
-    fprintf(fptr, "\n");
   }
-
   fclose(fptr);
 }
 
@@ -155,7 +165,7 @@ void BAProblem::WriteToPLYFile(const std::string& filename) const {
 
   of << "ply" << '\n'
      << "format ascii 1.0" << '\n'
-     << "element vertex " << num_cameras_ + num_points_ << '\n'
+     << "element vertex " << num_cameras_ + num_points_per_scene_ << '\n'
      << "property float x" << '\n'
      << "property float y" << '\n'
      << "property float z" << '\n'
@@ -212,17 +222,17 @@ void BAProblem::AngleAxisAndCenterToCamera(const double* angle_axis,
 
 void BAProblem::Normalize() {
   // Compute the marginal median of the geometry.
-  std::vector<double> tmp(num_points_);
+  std::vector<double> tmp(num_points_per_scene_);
   Eigen::Vector3d median;
   double* points = mutable_points();
   for (int i = 0; i < 3; ++i) {
-    for (int j = 0; j < num_points_; ++j) {
+    for (int j = 0; j < num_points_per_scene_; ++j) {
       tmp[j] = points[3 * j + i];
     }
     median(i) = Median(&tmp);
   }
 
-  for (int i = 0; i < num_points_; ++i) {
+  for (int i = 0; i < num_points_per_scene_; ++i) {
     VectorRef point(points + 3 * i, 3);
     tmp[i] = (point - median).lpNorm<1>();
   }
@@ -242,7 +252,7 @@ void BAProblem::Normalize() {
   VLOG(2) << "scale: " << scale;
 
   // X = scale * (X - median)
-  for (int i = 0; i < num_points_; ++i) {
+  for (int i = 0; i < num_points_per_scene_; ++i) {
     VectorRef point(points + 3 * i, 3);
     point = scale * (point - median);
   }
@@ -268,7 +278,7 @@ void BAProblem::Perturb(const double rotation_sigma,
 
   double* points = mutable_points();
   if (point_sigma > 0) {
-    for (int i = 0; i < num_points_; ++i) {
+    for (int i = 0; i < num_points_per_scene_; ++i) {
       PerturbPoint3(point_sigma, points + 3 * i);
     }
   }

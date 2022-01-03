@@ -263,21 +263,21 @@ void SetMinimizerOptions(Solver::Options* options) {
   options->use_inner_iterations = CERES_GET_FLAG(FLAGS_inner_iterations);
 }
 
-void SetSolverOptionsFromFlags(BAProblem* ba_problem, Solver::Options* options) {
+void SetSolverOptionsFromFlags(Solver::Options* options) {
   SetMinimizerOptions(options);
   SetLinearSolver(options);
-  SetOrdering(ba_problem, options);
+  //SetOrdering(ba_problem, options);
 }
 
-void BuildProblem(BAProblem* ba_problem, Problem* problem) {
+void BuildProblem(BAProblem* ba_problem, Problem* problem, int scene_id) {
   // Observations is 2*num_observations long array observations =
   // [u_1, u_2, ... , u_n], where each u_i is two dimensional, the x
   // and y positions of the observation.
+  int start = ba_problem->scene_start_for_scene_id(scene_id);
+  int length = ba_problem->scene_length_for_scene_id(scene_id);
   const double* observations = ba_problem->observations();
-  for (int i = 0; i < ba_problem->num_observations(); ++i) {
+  for (int i = start; i < start + length; ++i) {
     CostFunction* cost_function;
-    // Each Residual block takes a point (and a camera) as input and
-    // outputs a 2 dimensional residual.
     cost_function = (CERES_GET_FLAG(FLAGS_no_cam_optimization))
                         ? SnavelyReprojectionErrorWithoutCam::Create(
                               observations[2 * i + 0],
@@ -293,6 +293,13 @@ void BuildProblem(BAProblem* ba_problem, Problem* problem) {
 
     // Each observation correponds to a pair of a camera and a point
     double* point = ba_problem->mutable_point_for_observation(i);
+    // If it's not the first scene, initialize the point with the previous scene's
+    if (scene_id > 0) {
+      double* prev_point = ba_problem->mutable_point_for_observation(i, true);
+      for (int j = 0; j < ba_problem->point_block_size(); ++j) {
+        point[j] = prev_point[j];
+      }
+    }
     if (CERES_GET_FLAG(FLAGS_no_cam_optimization)) {
       problem->AddResidualBlock(cost_function, 
                                 loss_function, 
@@ -314,28 +321,36 @@ void SolveProblem(const char* filename) {
     ba_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_initial_ply));
   }
 
-  Problem problem;
+  Solver::Options options;
+  SetSolverOptionsFromFlags(&options);
+
 
   srand(CERES_GET_FLAG(FLAGS_random_seed));
   // ba_problem.Normalize();
   // ba_problem.Perturb(CERES_GET_FLAG(FLAGS_rotation_sigma),
   //                     CERES_GET_FLAG(FLAGS_translation_sigma),
   //                     CERES_GET_FLAG(FLAGS_point_sigma));
+  for (int scene_id = 0; scene_id < ba_problem.num_scenes(); ++scene_id) {
+    if (scene_id%50 == 0) {
+      std::cout << "Solving scene " << scene_id << std::endl;
+    }
+    Problem problem;
+    BuildProblem(&ba_problem, &problem, scene_id);
+    options.gradient_tolerance = 1e-16;
+    options.function_tolerance = 1e-16;
+    options.logging_type = ceres::SILENT;
+    Solver::Summary summary;
+    Solve(options, &problem, &summary);
+    if (scene_id%50 == 0) {
+      std::cout << summary.BriefReport() << std::endl;
+    }
 
-  BuildProblem(&ba_problem, &problem);
-  Solver::Options options;
-  SetSolverOptionsFromFlags(&ba_problem, &options);
-  options.gradient_tolerance = 1e-16;
-  options.function_tolerance = 1e-16;
-  Solver::Summary summary;
-  Solve(options, &problem, &summary);
-  std::cout << summary.FullReport() << "\n";
-
-  if (!CERES_GET_FLAG(FLAGS_final_ply).empty()) {
-    ba_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_final_ply));
-  }
-  if (!CERES_GET_FLAG(FLAGS_output).empty()) {
-    ba_problem.WriteToFile(CERES_GET_FLAG(FLAGS_output));
+    if (!CERES_GET_FLAG(FLAGS_final_ply).empty()) {
+      ba_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_final_ply));
+    }
+    if (!CERES_GET_FLAG(FLAGS_output).empty()) {
+      ba_problem.WriteToFile(CERES_GET_FLAG(FLAGS_output));
+    }
   }
 }
 
