@@ -101,7 +101,7 @@ BAProblem::BAProblem(const std::string& filename) {
   for (int i = 0; i < num_observations_; ++i) {
     FscanfOrDie(fptr, "%d", scene_index_ + i);
     if (scene_index_[i] != current_scene) {
-      scene_indices_offset_[current_scene + 1] = i;
+      scene_indices_offset_[scene_index_[i]] = i;
       current_scene = scene_index_[i];
     }
     FscanfOrDie(fptr, "%d", camera_index_ + i);
@@ -146,10 +146,10 @@ void BAProblem::WriteToFile(const std::string& filename) const {
     fprintf(fptr, "\n");
   }
 
-  const double* points = parameters_ + camera_block_size() * num_cameras_;
+  const double* points = cameras() + camera_block_size() * num_cameras_;
   for (int i = 0; i < num_scenes(); ++i) {
     for (int j = 0; j < num_points(); ++j) {
-      const double* point = points + i * num_points_per_scene_ + j * point_block_size();
+      const double* point = points + (i * num_points_per_scene_ + j) * point_block_size();
       for (int k = 0; k < point_block_size(); ++k) {
         fprintf(fptr, " %.16g", point[k]);
       }
