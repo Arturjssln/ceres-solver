@@ -97,8 +97,10 @@ DEFINE_string(dense_linear_algebra_library, "eigen",
               "Options are: eigen and lapack.");
 DEFINE_string(ordering, "automatic", "Options are: automatic, user.");
 
-DEFINE_bool(no_cam_optimization, false, "If true, don't optimize the camera. "
-            "If false, camera pose and rotation are optimized.");
+DEFINE_bool(optimize_cam, false, "If true, optimize the camera pose and rotation. "
+            "If false, cameras paramaters are not optimized.");
+DEFINE_bool(use_confidence, false, "If true, use confidence. "
+            "If false, all estimation have same weights.");
 
 DEFINE_bool(robustify, false, "Use a robust loss function.");
 
@@ -276,16 +278,35 @@ void BuildProblem(BAProblem* ba_problem, Problem* problem, int scene_id) {
   int start = ba_problem->scene_start_for_scene_id(scene_id);
   int length = ba_problem->scene_length_for_scene_id(scene_id);
   const double* observations = ba_problem->observations();
+  const double* confidence_scores = ba_problem->confidence();
+
   for (int i = start; i < start + length; ++i) {
     CostFunction* cost_function;
-    cost_function = (CERES_GET_FLAG(FLAGS_no_cam_optimization))
-                        ? SnavelyReprojectionErrorWithoutCam::Create(
-                              observations[2 * i + 0],
-                              observations[2 * i + 1], 
-                              ba_problem->camera_for_observation(i))
-                        : SnavelyReprojectionError::Create(
-                              observations[2 * i + 0], 
-                              observations[2 * i + 1]);
+    if (CERES_GET_FLAG(FLAGS_optimize_cam)) {
+      if (CERES_GET_FLAG(FLAGS_use_confidence)) {
+        cost_function = SnavelyReprojectionError::Create(
+                          observations[2 * i + 0],
+                          observations[2 * i + 1], 
+                          confidence_scores[i]);
+      } else {
+        cost_function = SnavelyReprojectionErrorNoConfidence::Create(
+                          observations[2 * i + 0],
+                          observations[2 * i + 1]);
+      }
+    } else {
+      if (CERES_GET_FLAG(FLAGS_use_confidence)) {
+        cost_function = SnavelyReprojectionErrorNoCam::Create(
+                          observations[2 * i + 0],
+                          observations[2 * i + 1], 
+                          confidence_scores[i],
+                          ba_problem->camera_for_observation(i));
+      } else {
+        cost_function = SnavelyReprojectionErrorNoConfidenceNoCam::Create(
+                          observations[2 * i + 0],
+                          observations[2 * i + 1], 
+                          ba_problem->camera_for_observation(i));
+      }
+    }
 
     // If enabled use Huber's loss function.
     LossFunction* loss_function =
@@ -300,15 +321,15 @@ void BuildProblem(BAProblem* ba_problem, Problem* problem, int scene_id) {
         point[j] = prev_point[j];
       }
     }
-    if (CERES_GET_FLAG(FLAGS_no_cam_optimization)) {
-      problem->AddResidualBlock(cost_function, 
-                                loss_function, 
-                                point);
-    } else {
+    if (CERES_GET_FLAG(FLAGS_optimize_cam)) {
       double* camera = ba_problem->mutable_camera_for_observation(i);
       problem->AddResidualBlock(cost_function, 
                                 loss_function,  
                                 camera, 
+                                point);
+    } else {
+      problem->AddResidualBlock(cost_function, 
+                                loss_function, 
                                 point);
     }
   }

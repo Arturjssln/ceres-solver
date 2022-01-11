@@ -92,6 +92,7 @@ BAProblem::BAProblem(const std::string& filename) {
   point_index_ = new int[num_observations_];
   camera_index_ = new int[num_observations_];
   observations_ = new double[2 * num_observations_];
+  confidence_ = new double[num_observations_];
   scene_indices_offset_ = new int[num_scenes_];
   scene_indices_offset_[0] = 0;
 
@@ -109,6 +110,7 @@ BAProblem::BAProblem(const std::string& filename) {
     for (int j = 0; j < 2; ++j) {
       FscanfOrDie(fptr, "%lf", observations_ + 2 * i + j);
     }
+    FscanfOrDie(fptr, "%lf", confidence_ + i);
   }
   for (int i = 0; i < num_parameters_; ++i) {
     FscanfOrDie(fptr, "%lf", parameters_ + i);
@@ -134,6 +136,7 @@ void BAProblem::WriteToFile(const std::string& filename) const {
     for (int j = 0; j < 2; ++j) {
       fprintf(fptr, " %g", observations_[2 * i + j]);
     }
+    fprintf(fptr, " %g", confidence_[i]);
     fprintf(fptr, "\n");
   }
 
@@ -307,6 +310,8 @@ BAProblem::~BAProblem() {
   delete[] camera_index_;
   delete[] observations_;
   delete[] parameters_;
+  delete[] scene_indices_offset_;
+  delete[] confidence_;
 }
 
 }  // namespace ceres

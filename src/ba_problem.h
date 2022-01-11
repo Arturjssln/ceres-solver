@@ -75,6 +75,7 @@ class BAProblem {
   const int* point_index()     const { return point_index_;              }
   const int* camera_index()    const { return camera_index_;             }
   const double* observations() const { return observations_;             }
+  const double* confidence()   const { return confidence_;               }
   const double* parameters()   const { return parameters_;               }
   const double* cameras()      const { return parameters_;               }
   double* mutable_cameras()          { return parameters_;               }
@@ -121,6 +122,7 @@ class BAProblem {
   // The parameter vector is laid out as follows
   // [camera_1, ..., camera_n, point_1, ..., point_m]
   double* parameters_;
+  double* confidence_;
 };
 
 }  // namespace ceres
