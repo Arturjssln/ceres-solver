@@ -79,6 +79,9 @@ class BAProblem {
   const double* parameters()   const { return parameters_;               }
   const double* cameras()      const { return parameters_;               }
   double* mutable_cameras()          { return parameters_;               }
+  const double* points() {
+    return parameters_ + camera_block_size() * num_cameras_;
+  }
   double* mutable_points() {
     return parameters_ + camera_block_size() * num_cameras_;
   }
@@ -87,6 +90,10 @@ class BAProblem {
   }
   double* mutable_camera_for_observation(int i) {
     return mutable_cameras() + camera_index_[i] * camera_block_size();
+  }
+  const double* point_for_observation(int i, bool previous_scene = false) {
+    int scene_index_tmp = scene_index_[i] + (previous_scene ? -1 : 0);
+    return points() + (num_points_per_scene_ * scene_index_tmp + point_index_[i]) * point_block_size();
   }
   double* mutable_point_for_observation(int i, bool previous_scene = false) {
     int scene_index_tmp = scene_index_[i] + (previous_scene ? -1 : 0);

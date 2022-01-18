@@ -54,6 +54,32 @@ cc_binary(
     deps = EXAMPLE_DEPS,
 )
 
+# cc_binary(
+#     name = "camera_optimizer",
+#     srcs = [
+#         "cam_opt.cc",
+#         "cam_opt.h",
+#         "camera_optimizer.cc",
+#         "random.h",
+#         "snavely_reprojection_error.h",
+#     ],
+#     copts = EXAMPLE_COPTS,
+#     deps = EXAMPLE_DEPS,
+# )
+
+# cc_binary(
+#     name = "camera_calibrator",
+#     srcs = [
+#         "ba_calibration.cc",
+#         "ba_calibration.h",
+#         "camera_calibrator.cc",
+#         "random.h",
+#         "snavely_reprojection_error.h",
+#     ],
+#     copts = EXAMPLE_COPTS,
+#     deps = EXAMPLE_DEPS,
+# )
+
 # [cc_binary(
 #     name = example,
 #     srcs = [example + ".cc"],

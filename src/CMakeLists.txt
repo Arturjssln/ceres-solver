@@ -47,6 +47,16 @@ if (GFLAGS)
                  ba_problem.cc)
   target_link_libraries(bundle_adjuster Ceres::ceres gflags)
 
+  # add_executable(camera_calibrator
+  #                camera_calibrator.cc
+  #                ba_calibration.cc)
+  # target_link_libraries(camera_calibrator Ceres::ceres gflags)
+
+  # add_executable(camera_optimizer
+  #                camera_optimizer.cc
+  #                cam_opt.cc)
+  # target_link_libraries(camera_optimizer Ceres::ceres gflags)
+
 endif (GFLAGS)
 
 # add_subdirectory(sampled_function)

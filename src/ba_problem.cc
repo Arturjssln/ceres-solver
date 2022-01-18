@@ -134,9 +134,9 @@ void BAProblem::WriteToFile(const std::string& filename) const {
   for (int i = 0; i < num_observations_; ++i) {
     fprintf(fptr, "%d %d %d", scene_index_[i], camera_index_[i], point_index_[i]);
     for (int j = 0; j < 2; ++j) {
-      fprintf(fptr, " %g", observations_[2 * i + j]);
+      fprintf(fptr, " %.16g", observations_[2 * i + j]);
     }
-    fprintf(fptr, " %g", confidence_[i]);
+    fprintf(fptr, " %.16g", confidence_[i]);
     fprintf(fptr, "\n");
   }
 

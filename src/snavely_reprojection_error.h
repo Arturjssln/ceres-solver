@@ -59,7 +59,6 @@ struct SnavelyReprojectionError {
     // camera[0,1,2] are the angle-axis rotation.
     T p[3];
     AngleAxisRotatePoint(camera, point, p);
-
     // camera[3,4,5] are the translation.
     p[0] += camera[3];
     p[1] += camera[4];
@@ -211,8 +210,7 @@ struct SnavelyReprojectionErrorNoConfidence {
 
   // Factory to hide the construction of the CostFunction object from
   // the client code.
-  static ceres::CostFunction* Create(const double observed_x,
-                                     const double observed_y) {
+  static ceres::CostFunction* Create(const double observed_x, const double observed_y) {
     return (new ceres::AutoDiffCostFunction<SnavelyReprojectionErrorNoConfidence, 2, 12, 3>(
         new SnavelyReprojectionErrorNoConfidence(observed_x, observed_y)));
   }
@@ -275,6 +273,66 @@ struct SnavelyReprojectionErrorNoConfidenceNoCam {
   double observed_x;
   double observed_y;
   const double* camera;
+};
+
+// Templated pinhole camera model for used with Ceres.  The camera is
+// parameterized using 12 parameters: 3 for rotation, 3 for translation, 2 for
+// focal length, 2 for radial distortion and 2 for the principal point.
+struct SnavelyReprojectionErrorNoPoint {
+  SnavelyReprojectionErrorNoPoint(double observed_x, double observed_y, const double* point)
+      : observed_x(observed_x), observed_y(observed_y), point(point) {}
+
+  template <typename T>
+  bool operator()(const T* const camera,
+                  T* residuals) const {
+    // camera[0,1,2] are the angle-axis rotation.
+    T p[3];
+    const T pt[3] = {
+      T(point[0]),
+      T(point[1]),
+      T(point[2])
+    };
+    AngleAxisRotatePoint(camera, pt, p);
+    // camera[3,4,5] are the translation.
+    p[0] += T(camera[3]);
+    p[1] += T(camera[4]);
+    p[2] += T(camera[5]);
+
+    const T xp = p[0] / p[2];
+    const T yp = p[1] / p[2];
+
+    // Apply second and fourth order radial distortion.
+    const T l1 = T(camera[8]);
+    const T l2 = T(camera[9]);
+    const T r2 = xp * xp + yp * yp;
+    const T distortion = 1.0 + r2 * (l1 + l2 * r2);
+
+    // Compute final projected point position.
+    const T focal_x = T(camera[6]);
+    const T focal_y = T(camera[7]);
+    const T principal_x = T(camera[10]);
+    const T principal_y = T(camera[11]);
+    const T predicted_x = focal_x * distortion * xp + principal_x;
+    const T predicted_y = focal_y * distortion * yp + principal_y;
+
+    // The error is the difference between the predicted and observed position.
+    residuals[0] = predicted_x - observed_x;
+    residuals[1] = predicted_y - observed_y;
+    return true;
+  }
+
+  // Factory to hide the construction of the CostFunction object from
+  // the client code.
+  static ceres::CostFunction* Create(const double observed_x, 
+                                     const double observed_y, 
+                                     const double* point) {
+    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionErrorNoPoint, 2, 12>(
+        new SnavelyReprojectionErrorNoPoint(observed_x, observed_y, point)));
+  }
+
+  double observed_x;
+  double observed_y;
+  const double* point;
 };
 
 }  // namespace ceres

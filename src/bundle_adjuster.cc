@@ -101,6 +101,8 @@ DEFINE_bool(optimize_cam, false, "If true, optimize the camera pose and rotation
             "If false, cameras paramaters are not optimized.");
 DEFINE_bool(use_confidence, false, "If true, use confidence. "
             "If false, all estimation have same weights.");
+DEFINE_bool(gd_points, false, "If true, consider points as groundtruth. "
+            "If false, points are estimated.");           
 
 DEFINE_bool(robustify, false, "Use a robust loss function.");
 
@@ -279,39 +281,41 @@ void BuildProblem(BAProblem* ba_problem, Problem* problem, int scene_id) {
   int length = ba_problem->scene_length_for_scene_id(scene_id);
   const double* observations = ba_problem->observations();
   const double* confidence_scores = ba_problem->confidence();
-
+  
   for (int i = start; i < start + length; ++i) {
     CostFunction* cost_function;
-    if (CERES_GET_FLAG(FLAGS_optimize_cam)) {
-      if (CERES_GET_FLAG(FLAGS_use_confidence)) {
-        cost_function = SnavelyReprojectionError::Create(
-                          observations[2 * i + 0],
-                          observations[2 * i + 1], 
-                          confidence_scores[i]);
-      } else {
-        cost_function = SnavelyReprojectionErrorNoConfidence::Create(
-                          observations[2 * i + 0],
-                          observations[2 * i + 1]);
-      }
+    if (CERES_GET_FLAG(FLAGS_gd_points)) {
+      cost_function = SnavelyReprojectionErrorNoPoint::Create(
+          observations[2 * i + 0],
+          observations[2 * i + 1],
+          ba_problem->point_for_observation(i));
     } else {
-      if (CERES_GET_FLAG(FLAGS_use_confidence)) {
-        cost_function = SnavelyReprojectionErrorNoCam::Create(
-                          observations[2 * i + 0],
-                          observations[2 * i + 1], 
-                          confidence_scores[i],
-                          ba_problem->camera_for_observation(i));
+      if (CERES_GET_FLAG(FLAGS_optimize_cam)) {
+        if (CERES_GET_FLAG(FLAGS_use_confidence)) {
+          cost_function = SnavelyReprojectionError::Create(
+                            observations[2 * i + 0],
+                            observations[2 * i + 1], 
+                            confidence_scores[i]);
+        } else {
+          cost_function = SnavelyReprojectionErrorNoConfidence::Create(
+                            observations[2 * i + 0],
+                            observations[2 * i + 1]);
+        }
       } else {
-        cost_function = SnavelyReprojectionErrorNoConfidenceNoCam::Create(
-                          observations[2 * i + 0],
-                          observations[2 * i + 1], 
-                          ba_problem->camera_for_observation(i));
+        if (CERES_GET_FLAG(FLAGS_use_confidence)) {
+          cost_function = SnavelyReprojectionErrorNoCam::Create(
+                            observations[2 * i + 0],
+                            observations[2 * i + 1], 
+                            confidence_scores[i],
+                            ba_problem->camera_for_observation(i));
+        } else {
+          cost_function = SnavelyReprojectionErrorNoConfidenceNoCam::Create(
+                            observations[2 * i + 0],
+                            observations[2 * i + 1], 
+                            ba_problem->camera_for_observation(i));
+        }
       }
     }
-
-    // If enabled use Huber's loss function.
-    LossFunction* loss_function =
-        CERES_GET_FLAG(FLAGS_robustify) ? new HuberLoss(1.0) : NULL;
-
     // Each observation correponds to a pair of a camera and a point
     double* point = ba_problem->mutable_point_for_observation(i);
     // If it's not the first scene, initialize the point with the previous scene's
@@ -321,8 +325,16 @@ void BuildProblem(BAProblem* ba_problem, Problem* problem, int scene_id) {
         point[j] = prev_point[j];
       }
     }
-    if (CERES_GET_FLAG(FLAGS_optimize_cam)) {
-      double* camera = ba_problem->mutable_camera_for_observation(i);
+    double* camera = ba_problem->mutable_camera_for_observation(i);
+    // If enabled use Huber's loss function.
+    LossFunction* loss_function =
+        CERES_GET_FLAG(FLAGS_robustify) ? new HuberLoss(1.0) : NULL;
+    
+    if (CERES_GET_FLAG(FLAGS_gd_points)) {
+      problem->AddResidualBlock(cost_function, 
+                                loss_function,  
+                                camera);
+    } else if (CERES_GET_FLAG(FLAGS_optimize_cam)) {
       problem->AddResidualBlock(cost_function, 
                                 loss_function,  
                                 camera, 
@@ -351,27 +363,21 @@ void SolveProblem(const char* filename) {
   // ba_problem.Perturb(CERES_GET_FLAG(FLAGS_rotation_sigma),
   //                     CERES_GET_FLAG(FLAGS_translation_sigma),
   //                     CERES_GET_FLAG(FLAGS_point_sigma));
+  Problem problem;
   for (int scene_id = 0; scene_id < ba_problem.num_scenes(); ++scene_id) {
-    if (scene_id%50 == 0) {
-      std::cout << "Solving scene " << scene_id << std::endl;
-    }
-    Problem problem;
     BuildProblem(&ba_problem, &problem, scene_id);
-    options.gradient_tolerance = 1e-16;
-    options.function_tolerance = 1e-16;
-    options.logging_type = ceres::SILENT;
-    Solver::Summary summary;
-    Solve(options, &problem, &summary);
-    if (scene_id%50 == 0) {
-      std::cout << summary.BriefReport() << std::endl;
-    }
+  }
+  options.gradient_tolerance = 1e-16;
+  options.function_tolerance = 1e-16;
+  Solver::Summary summary;
+  Solve(options, &problem, &summary);
+  std::cout << summary. FullReport() << std::endl;
 
-    if (!CERES_GET_FLAG(FLAGS_final_ply).empty()) {
-      ba_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_final_ply));
-    }
-    if (!CERES_GET_FLAG(FLAGS_output).empty()) {
-      ba_problem.WriteToFile(CERES_GET_FLAG(FLAGS_output));
-    }
+  if (!CERES_GET_FLAG(FLAGS_final_ply).empty()) {
+    ba_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_final_ply));
+  }
+  if (!CERES_GET_FLAG(FLAGS_output).empty()) {
+    ba_problem.WriteToFile(CERES_GET_FLAG(FLAGS_output));
   }
 }
 
