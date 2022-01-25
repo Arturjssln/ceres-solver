@@ -70,9 +70,16 @@ struct SnavelyReprojectionError {
     // Apply second and fourth order radial distortion.
     const T& l1 = camera[8];
     const T& l2 = camera[9];
+    // const T& l3 = camera[10];
+    // const T& t1 = camera[11];
+    // const T& t2 = camera[12];
     const T r2 = xp * xp + yp * yp;
     const T distortion = 1.0 + r2 * (l1 + l2 * r2);
-
+    // const T distortion_r = 1.0 + r2 * (l1 + l2 * r2 + l3 * r2 * r2);
+    // const T distortion_t_x = t1 * (r2 + 2 * xp * xp) + 2.0 * t2 * xp * yp;
+    // const T distortion_t_y = t2 * (r2 + 2 * yp * yp) + 2.0 * t1 * xp * yp;
+    // const T undistorded_x = distortion_r * xp + distortion_t_x;
+    // const T undistorded_y = distortion_r * yp + distortion_t_y;
     // Compute final projected point position.
     const T& focal_x = camera[6];
     const T& focal_y = camera[7];
@@ -80,6 +87,10 @@ struct SnavelyReprojectionError {
     const T& principal_y = camera[11];
     const T predicted_x = focal_x * distortion * xp + principal_x;
     const T predicted_y = focal_y * distortion * yp + principal_y;
+    // const T& principal_x = camera[13];
+    // const T& principal_y = camera[14];
+    // const T predicted_x = focal_x * undistorded_x + principal_x;
+    // const T predicted_y = focal_y * undistorded_y + principal_y;
 
     // The error is the difference between the predicted and observed position.
     residuals[0] = (predicted_x - observed_x) * confidence;

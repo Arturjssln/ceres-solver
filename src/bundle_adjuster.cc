@@ -319,7 +319,7 @@ void BuildProblem(BAProblem* ba_problem, Problem* problem, int scene_id) {
     // Each observation correponds to a pair of a camera and a point
     double* point = ba_problem->mutable_point_for_observation(i);
     // If it's not the first scene, initialize the point with the previous scene's
-    if (scene_id > 0) {
+    if ((scene_id > 0) && !CERES_GET_FLAG(FLAGS_gd_points)) {
       double* prev_point = ba_problem->mutable_point_for_observation(i, true);
       for (int j = 0; j < ba_problem->point_block_size(); ++j) {
         point[j] = prev_point[j];
@@ -359,10 +359,7 @@ void SolveProblem(const char* filename) {
 
 
   srand(CERES_GET_FLAG(FLAGS_random_seed));
-  // ba_problem.Normalize();
-  // ba_problem.Perturb(CERES_GET_FLAG(FLAGS_rotation_sigma),
-  //                     CERES_GET_FLAG(FLAGS_translation_sigma),
-  //                     CERES_GET_FLAG(FLAGS_point_sigma));
+
   Problem problem;
   for (int scene_id = 0; scene_id < ba_problem.num_scenes(); ++scene_id) {
     BuildProblem(&ba_problem, &problem, scene_id);
@@ -371,7 +368,7 @@ void SolveProblem(const char* filename) {
   options.function_tolerance = 1e-16;
   Solver::Summary summary;
   Solve(options, &problem, &summary);
-  std::cout << summary. FullReport() << std::endl;
+  std::cout << summary.FullReport() << std::endl;
 
   if (!CERES_GET_FLAG(FLAGS_final_ply).empty()) {
     ba_problem.WriteToPLYFile(CERES_GET_FLAG(FLAGS_final_ply));
